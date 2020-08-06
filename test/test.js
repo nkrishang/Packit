@@ -22,6 +22,6 @@ describe("Market", function() {
 
     await market.connect(vendor).registerAsset(forSale, price, collateral, assetID);
 
-    expect(await market.ownershipLedger[assetID]).to.equal(vendorAddr);
+    expect(await market.ownershipRecord[assetID]).to.equal(vendorAddr);
   });
 })
