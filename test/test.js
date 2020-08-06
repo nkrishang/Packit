@@ -29,7 +29,9 @@ function linkBytecode(artifact, libraries) {
 
 describe("Market", function() {
   let market;
-  beforeEach(async () => {
+  let vendor;
+  let customer;
+  before(async () => {
     const Signatures = await ethers.getContractFactory("Signatures");
     const library = await Signatures.deploy();
     await library.deployed();
@@ -43,12 +45,15 @@ describe("Market", function() {
 
     market = await Market.deploy();
     await market.deployed();
+
+    const addresses = await ethers.getSigners();
+
+    vendor = addresses[1];
+    customer = addresses[2];
   });
 
   it("Should register an asset with the right owner.", async function() {
-    const addresses = await ethers.getSigners();
-
-    const vendor = addresses[1];
+    
     const vendorAddr = await vendor.getAddress();
 
     const forSale = true;
@@ -57,9 +62,60 @@ describe("Market", function() {
 
     const description = "The fastest gaming ultrabook";
     const assetID = ethers.utils.keccak256(ethers.utils.hashMessage(description + `${vendorAddr}`));
+    //console.log(assetID);
 
     await market.connect(vendor).registerAsset(forSale, price, collateral, assetID);
 
-    expect(await market.ownershipRecord[assetID]).to.equal(vendorAddr);
+    expect(await market.getAssetOwner(assetID)).to.equal(vendorAddr);
   });
+
+  it("Should create a transaction receipt upon purchase.", async function() {
+    
+    const vendorAddr = await vendor.getAddress();
+    const customerAddr = await customer.getAddress();
+
+    const description = "The fastest gaming ultrabook";
+    const assetID = ethers.utils.keccak256(ethers.utils.hashMessage(description + `${vendorAddr}`));
+
+    await market.connect(customer).purchase(vendorAddr, assetID, {
+      value: ethers.utils.parseEther("7.5")
+    });
+
+    expect(await market.getTransactionRecipient(customerAddr, assetID)).to.equal(vendorAddr);
+  })
+
+  it("Should store and acknowledge the vendor signature", async function() {
+
+    let customerAddr = await customer.getAddress();
+    let vendorAddr = await vendor.getAddress();
+
+    const description = "The fastest gaming ultrabook";
+    const assetID = ethers.utils.keccak256(ethers.utils.hashMessage(description + `${vendorAddr}`));
+
+    const hashValue = await market.connect(vendor).getAssetHash(customerAddr, assetID);
+    const vendorSignature = await vendor.signMessage(hashValue);
+
+    await market.connect(vendor).initiateSale(customerAddr, assetID, vendorSignature);
+
+    expect(await market.getVendorSignature(customerAddr, assetID)).to.equal(vendorSignature);
+    expect(await market.getVendorSent(customerAddr, assetID)).to.equal(true);
+
+  });
+
+  it("Should acknolwedge the customer's reception of asset upon verifying sale.", async function() {
+
+    let customerAddr = await customer.getAddress();
+    let vendorAddr = await vendor.getAddress();
+
+    const description = "The fastest gaming ultrabook";
+    const assetID = ethers.utils.keccak256(ethers.utils.hashMessage(description + `${vendorAddr}`));
+
+    const hashValue = await market.connect(vendor).getAssetHash(customerAddr, assetID);
+
+    await market.connect(customer).verifySale(assetID, hashValue);
+
+    expect(await market.verifyOwnershipTransfer(vendorAddr, assetID)).to.equal(false);
+    expect(await market.getAssetOwner(assetID)).to.equal(customerAddr);
+    expect(await market.getCustomerReceived(customerAddr, assetID)).to.equal(true);
+  })
 })
