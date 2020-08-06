@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.0;
+pragma solidity ^0.6.8;
+pragma experimental ABIEncoderV2;
 
 import "./sign.sol";
+import "@nomiclabs/buidler/console.sol";
+import "@oppenzepplin/contracts/cryptography/ECDSA.sol";
 
 contract Market  {
 
-
+    string check = "Works";
     //================= Data Structures for the contract ==============
 
     struct Vault {
@@ -53,7 +56,29 @@ contract Market  {
 
     //==================== Test functions =================
 
+    function getAssetOwner(bytes32 _assetID) external view returns(address) {
+        return ownershipRecord[_assetID];
+    }
 
+    function getTransactionRecipient(address customer, bytes32 _assetID) external view returns(address){
+        return purchases[customer][_assetID].to;
+    }
+
+    function getVendorSignature(address customer, bytes32 _assetID) external view returns(bytes memory) {
+        return purchases[customer][_assetID].vault.signature;
+    }
+
+    function getVendorSent(address customer, bytes32 _assetID) external view returns(bool) {
+        return purchases[customer][_assetID].vault.vendorSent;
+    }
+
+    function verifyOwnershipTransfer(address vendor, bytes32 _assetID) external view returns(bool) {
+        return assetList[vendor][_assetID].owner;
+    }
+
+    function getCustomerReceived(address customer, bytes32 _assetID) external view returns(bool){
+        return purchases[customer][_assetID].vault.customerReceived;
+    }
     //==================== Asset Onboarding ===============
 
      function _registerAsset(address _owner, bool _forSale, uint _price, uint _collateral,  bytes32 _assetID) private {
@@ -109,7 +134,8 @@ contract Market  {
             vault: _vault
         });
 
-        bytes32 _hashValue = keccak256(abi.encode(_to, _from, _price, _collateral, _assetID));
+        bytes32 temp_hashValue = keccak256(abi.encode(_to, _from, _price, _collateral, _assetID));
+        bytes32 _hashValue = ECDSA.toEthSignedMessageHash(temp_hashValue);
         receipt.vault.hashValue = _hashValue;
 
         purchases[_from][_assetID] = receipt;
@@ -134,14 +160,14 @@ contract Market  {
 
     //==================== Handling the sale ==========================
 
-    function getAssetHash(address customer, bytes32 _assetID) external view returns(bytes32 toSign) {
+    function getAssetHash(address customer, bytes32 _assetID) external view returns(bytes32) {
         require(assetList[msg.sender][_assetID].owner, "You do not own this asset.");
 
-        toSign = purchases[customer][_assetID].vault.hashValue;
+        return purchases[customer][_assetID].vault.hashValue;
     }
 
     function initiateSale(address customer, bytes32 _assetID,  bytes calldata _signature) external {
-        require(assetList[msg.sender][_assetID].owner, "You do not own this asset.");
+        require(assetList[msg.sender][_assetID].owner == true, "You do not own this asset.");
 
         purchases[customer][_assetID].vault.signature = _signature;
         purchases[customer][_assetID].vault.vendorSent = true;
@@ -156,7 +182,9 @@ contract Market  {
         bytes memory vendorSignature = receipt.vault.signature;
         address _vendor = receipt.to;
 
-        address recoveredAddr = Signatures.recoverSigner(_hashValue, vendorSignature);
+        address recoveredAddr = ECDSA.recover(_hashValue, vendorSignature);
+
+        console.log(recoveredAddr);
 
         if(recoveredAddr == _vendor) {
 
