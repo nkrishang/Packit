@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.7.0;
+pragma solidity ^0.6.8;
+pragma experimental ABIEncoderV2;
 
 library Signatures {
 
@@ -14,14 +15,11 @@ library Signatures {
        bytes32 s;
        uint8 v;
 
-       assembly {
-           // first 32 bytes, after the length prefix
-           r := mload(add(sig, 32))
-           // second 32 bytes
-           s := mload(add(sig, 64))
-           // final byte (first byte of the next 32 bytes)
-           v := byte(0, mload(add(sig, 96)))
-       }
+        assembly {
+            r := mload(add(sig, 0x20))
+            s := mload(add(sig, 0x40))
+            v := byte(0, mload(add(sig, 0x60)))
+        }
 
        return (v, r, s);
    }
