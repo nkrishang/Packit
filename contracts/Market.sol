@@ -5,11 +5,10 @@ pragma experimental ABIEncoderV2;
 
 import "./sign.sol";
 import "@nomiclabs/buidler/console.sol";
-import "@openzeppelin/contracts/cryptography/ECDSA.sol";
 
 contract Market  {
 
-    string check = "Works";
+    string check = "Doesn't work";
     //================= Data Structures for the contract ==============
 
     struct Vault {
@@ -134,8 +133,8 @@ contract Market  {
             vault: _vault
         });
 
-        bytes32 temp_hashValue = keccak256(abi.encode(_to, _from, _price, _collateral, _assetID));
-        bytes32 _hashValue = ECDSA.toEthSignedMessageHash(temp_hashValue);
+        bytes32 _hashValue = keccak256(abi.encode(_to, _from, _price, _collateral, _assetID));
+        
         receipt.vault.hashValue = _hashValue;
 
         purchases[_from][_assetID] = receipt;
@@ -162,7 +161,7 @@ contract Market  {
 
     function getAssetHash(address customer, bytes32 _assetID) external view returns(bytes32) {
         require(assetList[msg.sender][_assetID].owner, "You do not own this asset.");
-
+        //console.logBytes32(purchases[customer][_assetID].vault.hashValue);
         return purchases[customer][_assetID].vault.hashValue;
     }
 
@@ -177,22 +176,29 @@ contract Market  {
 
         require(purchases[msg.sender][_assetID].vault.vendorSent, "Something has gone wrong. Hash received through invalid means.");
 
-        Transaction memory receipt = purchases[msg.sender][_assetID];
+        address vendor = purchases[msg.sender][_assetID].to;
+        bytes memory signature = purchases[msg.sender][_assetID].vault.signature;
 
-        bytes memory vendorSignature = receipt.vault.signature;
-        address _vendor = receipt.to;
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
 
-        address recoveredAddr = ECDSA.recover(_hashValue, vendorSignature);
+        (v, r, s) = Signatures.splitSignature(signature);
 
-        console.log(recoveredAddr);
-
-        if(recoveredAddr == _vendor) {
-
-            assetList[_vendor][_assetID].owner = false;
+        if(ecrecover(keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _hashValue)), v, r, s) == vendor) {
+            assetList[vendor][_assetID].owner = false;
             ownershipRecord[_assetID] = msg.sender;
 
             purchases[msg.sender][_assetID].vault.customerReceived = true;
+        } else {
+            console.logBytes32(r);
+            console.logBytes32(s);
+            console.log(v);
+
+            console.logBytes32(_hashValue);
+            console.log(ecrecover(keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _hashValue)), v, r, s));
         }
+
     }
 
     function withdrawCustomer(bytes32 _assetID) external payable {
