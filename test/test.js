@@ -95,8 +95,13 @@ describe("Market", function() {
     const hashValue = await market.connect(vendor).getAssetHash(customerAddr, assetID);
     const vendorSignature = await vendor.signMessage(hashValue);
 
+    console.log(vendorSignature);
+    console.log(hashValue);
+    console.log(vendorAddr);
+
     await market.connect(vendor).initiateSale(customerAddr, assetID, vendorSignature);
 
+    expect(await market.connect(vendor).getAssetHash(customerAddr, assetID)).to.equal(hashValue);
     expect(await market.getVendorSignature(customerAddr, assetID)).to.equal(vendorSignature);
     expect(await market.getVendorSent(customerAddr, assetID)).to.equal(true);
 
